@@ -1,11 +1,9 @@
 // @ts-check
 const path = require('path');
-const glob = require('glob');
 const { forStrictNullCheckEligibleFiles, forEachFileInSrc } = require('./src/getStrictNullCheckEligibleFiles');
 const { getImportsForFile } = require('./src/tsHelper');
 
-const vscodeRoot = path.join(process.cwd(), process.argv[2]);
-const srcRoot = path.join(vscodeRoot, 'src');
+const tsProject = path.join(process.cwd(), process.argv[2]);
 
 let sort = true;
 let filter;
@@ -19,18 +17,18 @@ if (false) { // Generate test files listing
     includeTests = true;
 }
 
-forStrictNullCheckEligibleFiles(vscodeRoot, () => { }, { includeTests }).then(async eligibleFiles => {
+forStrictNullCheckEligibleFiles(tsProject, () => { }, { includeTests }).then(async eligibleFiles => {
     const eligibleSet = new Set(eligibleFiles);
 
     const dependedOnCount = new Map(eligibleFiles.map(file => [file, 0]));
 
-    for (const file of await forEachFileInSrc(srcRoot)) {
+    for (const file of await forEachFileInSrc(tsProject)) {
         if (eligibleSet.has(file)) {
             // Already added
             continue;
         }
 
-        for (const imp of getImportsForFile(file, srcRoot)) {
+        for (const imp of getImportsForFile(file, tsProject)) {
             if (dependedOnCount.has(imp)) {
                 dependedOnCount.set(imp, dependedOnCount.get(imp) + 1);
             }
@@ -51,6 +49,5 @@ forStrictNullCheckEligibleFiles(vscodeRoot, () => { }, { includeTests }).then(as
 
 
 function toFormattedFilePath(file) {
-    // return `"./${path.relative(srcRoot, file)}",`;
-    return `- [ ] \`"./${path.relative(srcRoot, file)}"\``;
+    return `- [ ] \`"./${path.relative(tsProject, file)}"\``;
 }

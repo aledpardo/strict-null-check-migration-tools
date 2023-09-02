@@ -1,57 +1,53 @@
 
 // @ts-check
-const path = require('path');
-const fs = require('fs');
-const child_process = require('child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+const { exec } = require('node:child_process');
 const config = require('./src/config');
 const { forStrictNullCheckEligibleFiles } = require('./src/getStrictNullCheckEligibleFiles');
 
-const vscodeRoot = path.join(process.cwd(), process.argv[2]);
-const srcRoot = path.join(vscodeRoot, 'src');
+const projectRoot = path.join(process.cwd(), process.argv[2]);
 
-const buildCompletePattern = /Found (\d+) errors?\. Watching for file changes\./gi;
+forStrictNullCheckEligibleFiles(projectRoot, () => { }).then(async (files) => {
+    const tsconfigPath = path.join(projectRoot, config.targetTsconfig);
 
-forStrictNullCheckEligibleFiles(vscodeRoot, () => { }).then(async (files) => {
-    const tsconfigPath = path.join(srcRoot, config.targetTsconfig);
-
-    const child = child_process.spawn('tsc', ['-p', tsconfigPath, '--watch']);
     for (const file of files) {
+        const child = exec(`npx tsc -p ${tsconfigPath}`);
         await tryAutoAddStrictNulls(child, tsconfigPath, file);
     }
-    child.kill();
 });
 
 function tryAutoAddStrictNulls(child, tsconfigPath, file) {
+    const relativeFilePath = path.relative(projectRoot, file).replace(/\\/g, '/');
+    console.log(`Trying to auto add '${relativeFilePath}'`);
+
+    const originalConifg = JSON.parse(fs.readFileSync(tsconfigPath).toString());
+    originalConifg.files = Array.from(new Set((originalConifg.files || []).sort()));
+
+    const newConfig = Object.assign({}, originalConifg);
+    newConfig.files = Array.from(new Set(originalConifg.files.concat('./' + relativeFilePath).sort()));
+
+    fs.writeFileSync(tsconfigPath, JSON.stringify(newConfig, null, '\t'));
+    let hasErrors = false;
+
     return new Promise(resolve => {
-        const relativeFilePath = path.relative(srcRoot, file);
-        console.log(`Trying to auto add '${relativeFilePath}'`);
-
-        const originalConifg = JSON.parse(fs.readFileSync(tsconfigPath).toString());
-        originalConifg.files = Array.from(new Set(originalConifg.files.sort()));
-
-        // Config on accept
-        const newConfig = Object.assign({}, originalConifg);
-        newConfig.files = Array.from(new Set(originalConifg.files.concat('./' + relativeFilePath).sort()));
-
-        fs.writeFileSync(tsconfigPath, JSON.stringify(newConfig, null, '\t'));
-
-        const listener = (data) => {
+        child.stdout.on('data', (data) => {
             const textOut = data.toString();
-            const match = buildCompletePattern.exec(textOut);
+            const match = /error\sTS\d+/.exec(textOut);
+
             if (match) {
-                const errorCount = +match[1];
-                if (errorCount === 0) {
-                    console.log(`👍`);
-                    fs.writeFileSync(tsconfigPath, JSON.stringify(newConfig, null, '\t'));
-                }
-                else {
-                    console.log(`💥 - ${errorCount}`);
-                    fs.writeFileSync(tsconfigPath, JSON.stringify(originalConifg, null, '\t'));
-                }
-                resolve();
-                child.stdout.removeListener('data', listener);
+                hasErrors = true;
             }
-        };
-        child.stdout.on('data', listener);
+        });
+        child.stdout.on('end', () => {
+            if (hasErrors) {
+                console.log(`${relativeFilePath} has compilation errors. Not adding.`);
+                fs.writeFileSync(tsconfigPath, JSON.stringify(originalConifg, null, '\t'));
+            } else {
+                console.log(`No compilation errors, adding ${relativeFilePath} to tsconfig.files`);
+                fs.writeFileSync(tsconfigPath, JSON.stringify(newConfig, null, '\t'));
+            }
+            resolve(void 0);
+        });
     });
 }
