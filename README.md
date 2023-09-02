@@ -1,23 +1,25 @@
-Scripts to help [migrate VS Code to use strict null checks](https://github.com/Microsoft/vscode/issues/60565)
+# Strict Null Check Migration Tools
+
+Scripts to help [migrate a Typescript project to use strict null checks](https://www.typescriptlang.org/tsconfig#strictNullChecks)
 
 ## Usage
 
 ```bash
-$ npm install
+npm install
 ```
 
-**index.js**
+### `index.js`
 
-The main script prints of list of files that are eligible for strict null checks. This includes all files that only import files thare are already strict null checked. 
+The main script prints of list of files that are eligible for strict null checks. This includes all files that only import files thare are already strict null checked.
 
 ```bash
-$ node index.js /path/to/vscode
+node index.js /path/to/your/project
 ```
 
-**autoAdd.js**
+### `autoAdd.js`
 
-Very simple script that tries to auto add any eligible file to the `tsconfig.strictNullChecks.json`. This iteratively compiles the `tsconfig` project with just that file added. If there are no errors, it is added to the `tsconfig`
+Very simple script that tries to auto add any eligible file to a custom `tsconfig` defined in `src/config.js#targetTsconfig`. This iteratively compiles the `tsconfig` project with just that file added. If there are no errors, it is added to the `tsconfig`
 
 ```bash
-$ node autoAdd.js /path/to/vscode
+node autoAdd.js /path/to/your/project
 ```
